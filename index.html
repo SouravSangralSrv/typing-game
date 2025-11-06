@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Typing Speed Race - Fuel Your Typing!</title>
+<style>
+:root{
+ --track-height:10px;
+ --car-size:40px;
+ --lane-count:3;
+ --track-width:100%;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:sans-serif;background:#f0f8ff;color:#222;}
+header{background:#222;color:#fff;padding:10px;text-align:center;}
+header h1{font-size:1.8em;}
+.dashboard{display:flex;justify-content:space-around;padding:10px;background:#e0e0e0;}
+.dashboard div{flex:1;text-align:center;}
+#track{position:relative;background:#ddd;margin:20px 10%;height:150px;}
+.track-lane{position:absolute;left:0;right:0;height:var(--track-height);background:#999;}
+.track-lane:nth-child(odd){background:#bbb;}
+.track-dashed{height:var(--track-height);background:transparent;border-bottom:2px dashed #555;border-left:10px solid transparent;border-right:10px solid transparent;}
+.track-finish{position:absolute;right:10px;height:100%;border-left:2px solid #000;display:flex;align-items:center;}
+.track-finish::before{content:"▥";font-size:36px;margin-left:10px;transform:rotate(45deg);}
+#car{position:absolute;bottom:0;left:0;width:var(--car-size);height:var(--car-size);background:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 18h20L12 3 2 18z" fill="%23f00"/></svg>') no-repeat center center;background-size:contain;border-radius:5px;}
+.text-area{font-size:2rem;padding:20px;text-align:center;width:90%;margin:auto;background:#fff;border:1px solid #ccc;border-radius:5px;}
+.text-area span{color:#555;}
+.text-area .current{color:#0f0;background:#fff;}
+.text-area .correct{color:#0f0;}
+.text-area .error{color:#f00;animation:shake 0.3s;}
+@keyframes shake{0%,100%{transform:translateX(0);}20%,80%{transform:translateX(-5px);}40%,60%{transform:translateX(5px);}}
+.input-area{text-align:center;margin:20px;}
+.input-area input{font-size:1.5rem;padding:10px;width:90%;max-width:600px;}
+.input-area input:disabled{background:#ddd;}
+.progress-bar{width:90%;height:20px;background:#eee;margin:auto;border-radius:10px;overflow:hidden;}
+.progress-fill{height:100%;background:#4caf50;width:0%;}
+footer{text-align:center;padding:10px;}
+button{padding:10px 20px;margin:5px;cursor:pointer;border:none;background:#444;color:#fff;border-radius:5px;}
+button:hover{background:#555;}
+#result-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:flex;justify-content:center;align-items:center;visibility:hidden;}
+#result-modal.show{visibility:visible;}
+#result-box{background:#fff;padding:20px;border-radius:10px;text-align:center;width:80%;max-width:500px;}
+#result-box h2{margin-bottom:10px;}
+</style>
+</head>
+<body>
+<header>
+ <h1>🚗 Typing Speed Race 🚗</h1>
+</header>
+
+<div class="dashboard">
+ <div id="wpm">WPM: 0</div>
+ <div id="accuracy">Accuracy: 0%</div>
+ <div id="timer">Time: 0.0s</div>
+ <div id="chars">Chars: 0</div>
+</div>
+
+<div id="track">
+  <!-- lanes -->
+  <div class="track-lane" style="top:0;"></div>
+  <div class="track-lane" style="top:30px;"></div>
+  <div class="track-lane" style="top:60px;"></div>
+  <!-- dashed center -->
+  <div class="track-dashed" style="top:45px;"></div>
+  <!-- finish line -->
+  <div class="track-finish" style="top:0;bottom:0;"></div>
+  <!-- player car -->
+  <div id="car" style="top:45px;"></div>
+</div>
+
+<div class="progress-bar"><div class="progress-fill" id="progress"></div></div>
+
+<div class="text-area" id="textDisplay"></div>
+
+<div class="input-area">
+ <input type="text" id="inputField" placeholder="Start typing..." disabled>
+</div>
+
+<div class="dashboard">
+ <select id="difficulty">
+   <option value="easy">Easy</option>
+   <option value="medium" selected>Medium</option>
+   <option value="hard">Hard</option>
+ </select>
+ <select id="category">
+   <option value="quotes" selected>Quotes</option>
+   <option value="code">Code Snippets</option>
+   <option value="words">Common Words</option>
+ </select>
+ <button id="startBtn">Start Race</button>
+ <button id="restartBtn" style="display:none;">Race Again</button>
+</div>
+
+<div id="result-modal">
+ <div id="result-box">
+   <h2>Race Results</h2>
+   <p id="finalWPM"></p>
+   <p id="finalAccuracy"></p>
+   <p id="finalTime"></p>
+   <p id="pbMsg"></p>
+   <button id="newTextBtn">New Text</button>
+   <button id="restartGameBtn">Race Again</button>
+ </div>
+</div>
+
+<script>
+// Game state variables
+let quotes = {
+  easy: [
+    "The quick brown fox jumps over the lazy dog.",
+    "Hello world! This is easy."
+  ],
+  medium: [
+    "In a world where nothing is guaranteed, love is the only certainty.",
+    "Customizing variables can improve performance dramatically."
+  ],
+  hard: [
+    "When comprising data structures, the complexity of many programming patterns tends to tend toward misinterpretation, which may beset various individuals.",
+    "Synchronous processing in the event loop can free up asynchronous middleware, but concurrency might become a liability."
+  ]
+};
+
+let codeSnippets = {
+  easy: [
+    "console.log('Hello world');",
+    "let x = 5 + 3;"
+  ],
+  medium: [
+    "function fibonacci(n) { return n <= 1 ? n : fibonacci(n - 1) + fibonacci(n - 2); }",
+    "class Person { constructor(name) { this.name = name; } greet() { return `Hi, ${this.name}`; } }"
+  ],
+  hard: [
+    "const reducer = (state = 0, action) => { switch(action.type) { case 'ADD': return state + action.payload; default: return state; } }",
+    "const promise = new Promise((resolve, reject) => { setTimeout(() => resolve('done'), 1000); });"
+  ]
+};
+
+let words = {
+  easy: [
+    "apple banana cherry date",
+    "hello world this is easy"
+  ],
+  medium: [
+    "progression regression anticipation selection anticipation",
+    "simulation program certification networking execution configuration"
+  ],
+  hard: [
+    "electroencephalography psychophysiological neuroendoscopic photolithographic flavonoid-transesterification transcriptionalization dechlorination",
+    "unsurprisingly counterproductive transmultiplication multifunctionality elasticity disproportionation countervailing counterintuitive"
+  ]
+};
+
+let currentTextArray;
+let currentText = '';
+let chars = [];
+let totalChars = 0;
+let currentIndex = 0;
+let correctCount = 0;
+let totalTyped = 0;
+let startTime = 0;
+let timerInterval = null;
+let typedCorrect = 0; // correct characters typed
+
+let inputField = document.getElementById('inputField');
+let wpmDisplay = document.getElementById('wpm');
+let accuracyDisplay = document.getElementById('accuracy');
+let timerDisplay = document.getElementById('timer');
+let charsDisplay = document.getElementById('chars');
+let progressBar = document.getElementById('progress');
+let car = document.getElementById('car');
+let startBtn = document.getElementById('startBtn');
+let restartBtn = document.getElementById('restartBtn');
+let difficultySelect = document.getElementById('difficulty');
+let categorySelect = document.getElementById('category');
+let resultModal = document.getElementById('result-modal');
+let finalWPM = document.getElementById('finalWPM');
+let finalAccuracy = document.getElementById('finalAccuracy');
+let finalTime = document.getElementById('finalTime');
+let pbMsg = document.getElementById('pbMsg');
+let newTextBtn = document.getElementById('newTextBtn');
+let restartGameBtn = document.getElementById('restartGameBtn');
+let textDisplay = document.getElementById('textDisplay');
+
+// Utility to choose random item from array
+function randomChoice(arr) {
+ return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// Load a new text based on difficulty and category
+function loadNewText() {
+ const difficulty = difficultySelect.value;
+ const category = categorySelect.value;
+ switch(category){
+   case 'quotes': currentTextArray = quotes[difficulty]; break;
+   case 'code': currentTextArray = codeSnippets[difficulty]; break;
+   case 'words': currentTextArray = words[difficulty]; break;
+ }
+ currentText = randomChoice(currentTextArray);
+ chars = currentText.split('');
+ totalChars = chars.length;
+ currentIndex = 0;
+ correctCount = 0;
+ totalTyped = 0;
+ typedCorrect = 0;
+ // Reset displays
+ inputField.value = '';
+ inputField.disabled = false;
+ inputField.focus();
+ textDisplay.innerHTML = '';
+ chars.forEach((c, i) => {
+   const span = document.createElement('span');
+   span.textContent = c;
+   if(i === 0) span.classList.add('current');
+   textDisplay.appendChild(span);
+ });
+ // Reset car and progress
+ car.style.transform = 'translateX(0)';
+ progressBar.style.width = '0%';
+ updateStats();
+}
+
+// Start the race
+function startRace() {
+ loadNewText();
+ startBtn.style.display = 'none';
+ restartBtn.style.display = 'inline-block';
+ startTime = Date.now();
+ timerInterval = setInterval(updateTimer, 100);
+ // Attach keydown listener
+ document.addEventListener('keydown', handleKeydown);
+}
+
+// Handle key presses
+function handleKeydown(e) {
+ if(e.key === 'Backspace'){
+   if(currentIndex > 0){
+     currentIndex--;
+     const span = textDisplay.children[currentIndex];
+     span.classList.remove('correct','error');
+     span.classList.add('current');
+     if(span.textContent === chars[currentIndex]) typedCorrect--;
+     totalTyped--;
+   }
+   return;
+ }
+ const expectedChar = chars[currentIndex];
+ if(e.key === expectedChar){
+   // Correct
+   const span = textDisplay.children[currentIndex];
+   span.classList.remove('current');
+   span.classList.add('correct');
+   currentIndex++;
+   typedCorrect++;
+ } else if(e.key.length === 1){ // only consider visible keys
+   // Incorrect
+   const span = textDisplay.children[currentIndex];
+   span.classList.remove('current');
+   span.classList.add('error');
+   span.classList.add('shake');
+   setTimeout(()=>{span.classList.remove('shake');},300);
+   currentIndex++;
+ }
+ totalTyped++;
+ updateStats();
+ // Highlight next
+ if(currentIndex < totalChars){
+   const nextSpan = textDisplay.children[currentIndex];
+   nextSpan.classList.add('current');
+ } else {
+   // Finished
+   finishRace();
+ }
+}
+
+function updateTimer(){
+ const elapsed = (Date.now() - startTime)/1000;
+ timerDisplay.textContent = `Time: ${elapsed.toFixed(1)}s`;
+}
+
+function updateStats(){
+ // WPM calculation
+ const timeInMinutes = (Date.now() - startTime)/60000;
+ const wpm = timeInMinutes > 0 ? (typedCorrect / 5) / timeInMinutes : 0;
+ wpmDisplay.textContent = `WPM: ${wpm.toFixed(1)}`;
+ // Accuracy
+ const acc = totalTyped > 0 ? (typedCorrect / totalTyped)*100 : 0;
+ accuracyDisplay.textContent = `Accuracy: ${acc.toFixed(1)}%`;
+ // Chars typed
+ charsDisplay.textContent = `Chars: ${totalTyped}`;
+ // Progress bar
+ const percent = (currentIndex / totalChars)*100;
+ progressBar.style.width = `${percent}%`;
+ // Move car smoothly
+ const carPercent = percent;
+ car.style.transform = `translateX(${carPercent}%)`;
+}
+
+// Finish race logic
+function finishRace(){
+ clearInterval(timerInterval);
+ document.removeEventListener('keydown', handleKeydown);
+ inputField.disabled = true;
+ const finalTimeSec = (Date.now() - startTime)/1000;
+ const wpm = parseFloat(wpmDisplay.textContent.split(': ')[1]);
+ const accuracy = parseFloat(accuracyDisplay.textContent.split(': ')[1]);
+ finalWPM.textContent = `WPM: ${wpm.toFixed(1)}`;
+ finalAccuracy.textContent = `Accuracy: ${accuracy.toFixed(1)}%`;
+ finalTime.textContent = `Time: ${finalTimeSec.toFixed(1)}s`;
+ // Persist personal best
+ const difficulty = difficultySelect.value;
+ const category = categorySelect.value;
+ const key = `${difficulty}-${category}-pb`;
+ const currentPB = localStorage.getItem(key);
+ if(!currentPB || wpm > currentPB){
+   localStorage.setItem(key, wpm);
+   pbMsg.textContent = `🏆 New personal best!`;
+ } else {
+   pbMsg.textContent = `🙂 PB: ${currentPB.toFixed(1)} WPM`;
+ }
+ resultModal.classList.add('show');
+}
+
+// Restart options
+restartBtn.addEventListener('click',()=>{
+ resultModal.classList.remove('show');
+ startRace();
+});
+newTextBtn.addEventListener('click',()=>{
+ resultModal.classList.remove('show');
+ restartGameBtn.click();
+});
+restartGameBtn.addEventListener('click',()=>{
+ resultModal.classList.remove('show');
+ startRace();
+});
+startBtn.addEventListener('click',startRace);
+</script>
+</body>
+</html>
+
+
+ 
